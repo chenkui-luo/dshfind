@@ -1,0 +1,21 @@
+# 本机数据：索引、会话库、配置、图标、Edge 配置 —— 都不入库
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 调试/测试产生的临时东西
+_aclfix/
+*.log
+_shot*/
+_icon_*.png
+_quit_instance.json
+_no_such_instance.json
+*.tmp
+
+# 系统文件
+Thumbs.db
+desktop.ini
+.DS_Store

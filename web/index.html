@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dshfind</title>
+<link rel="icon" id="favicon" href="/favicon.ico">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- 顶部：模式 + 搜索 -->
+  <header class="head">
+    <div class="modes" id="modes">
+      <button class="mode is-on" data-mode="file">文件</button>
+      <button class="mode" data-mode="session">对话</button>
+      <span class="mode-pill" id="modePill"></span>
+    </div>
+    <div class="head-right">
+      <span id="stat"></span>
+      <button class="iconbtn" id="settingsBtn" title="外观设置：改名字 / 换图标">⚙</button>
+    </div>
+  </header>
+
+  <div class="searchbox" id="searchbox">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5L21 21"></path>
+    </svg>
+    <input id="q" type="text" autocomplete="off" spellcheck="false"
+           placeholder="搜文件名 / 拼音首字母（wd）/ 中文 / ext:md / size:&gt;10mb / dm:week / *.png">
+    <kbd class="hint" id="escHint">Esc</kbd>
+  </div>
+
+  <!-- 中间：结果列表（全高、右侧自绘滚动条） -->
+  <main class="body">
+    <section class="list-wrap" id="listWrap">
+      <div class="list" id="list" tabindex="0">
+        <div class="list-inner" id="listInner"></div>
+        <div class="empty" id="empty">
+          <div class="empty-title">开始输入</div>
+          <div class="empty-sub">支持拼音首字母、中文、<code>ext:md</code>、<code>size:&gt;10mb</code>、<code>dm:week</code>、<code>*.png</code>、<code>a | b</code></div>
+        </div>
+      </div>
+      <!-- 自绘滚动条 -->
+      <div class="sbar" id="sbar" hidden>
+        <div class="sbar-thumb" id="sbarThumb"></div>
+      </div>
+    </section>
+
+    <!-- 底部：预览抽屉 -->
+    <section class="preview" id="preview">
+      <div class="preview-head">
+        <span class="preview-title" id="pvTitle">预览</span>
+        <button class="pv-toggle" id="pvToggle" title="收起/展开预览">⌄</button>
+      </div>
+      <div class="preview-body" id="pvBody">
+        <div class="pv-meta" id="pvMeta"></div>
+        <pre class="pv-text" id="pvText"></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span id="footStat">索引载入中…</span>
+    <span class="keys">
+      <b>↑↓</b> 选择 · <b>Enter</b> 打开 · <b>Ctrl+Enter</b> 定位 · <b>Ctrl+C</b> 复制 ·
+      <b>Tab</b> 切换 · <b>空格</b> 预览 · <b>Ctrl+E</b> 缓存目录
+    </span>
+    <!-- 关窗口只是关窗口，后台的服务、热键、文件监听还在。这个按钮是真退出。 -->
+    <button class="footbtn" id="reindexBtn"
+            title="重新扫描磁盘（约 8 分钟），把程序关闭期间新增的文件补进来，等同 Ctrl+R">重建索引</button>
+    <button class="footbtn is-danger" id="quitBtn" title="完全退出 dshfind（Ctrl+Q）">退出</button>
+  </footer>
+</div>
+
+<!-- 外观设置：改应用名字 + 换图标（右上角 ⚙ 打开） -->
+<div class="modal-mask" id="appearanceMask" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="apTitle">
+    <div class="modal-head">
+      <h2 id="apTitle">外观设置</h2>
+      <button class="modal-x" id="apClose" title="关闭（Esc）">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <label class="field">
+        <span class="field-label">应用名字<span class="field-hint">改完窗口标题立刻变；留空就是默认的 dshfind</span></span>
+        <input id="apName" type="text" maxlength="40" placeholder="dshfind" autocomplete="off">
+      </label>
+
+      <div class="field">
+        <span class="field-label">应用图标
+          <span class="field-hint">PNG / ICO / SVG / JPG / WebP，建议正方形、256×256 以上；上限 1.5 MB</span>
+        </span>
+        <div class="icon-row">
+          <div class="icon-preview" id="apIconPreview"><span class="icon-empty">未设置</span></div>
+          <div class="icon-actions">
+            <button class="btn" id="apPick">选择图片…</button>
+            <button class="btn ghost" id="apResetIcon">恢复默认</button>
+            <input id="apFile" type="file" accept="image/png,image/x-icon,image/svg+xml,image/jpeg,image/webp,image/gif" hidden>
+          </div>
+        </div>
+      </div>
+
+      <p class="modal-note">
+        选好的图会自动<b>居中裁成正方形</b>，再缩成 16/24/32/48/64/128/256 七个档位打包成图标
+        —— 标题栏和任务栏会挑最合适的那一档，比直接压一张大图清楚。
+        不过标题栏只有 16～24 像素，细节多的照片在那个尺寸下本来就看不清；
+        想要更清楚，可以换一张<b>构图简单、对比强</b>的图。
+      </p>
+    </div>
+
+    <div class="modal-foot">
+      <span class="modal-stat" id="apStat"></span>
+      <button class="btn ghost" id="apCancel">取消</button>
+      <button class="btn primary" id="apSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/vendor/gsap.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
