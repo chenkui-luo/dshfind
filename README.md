@@ -43,10 +43,17 @@ python dshfind.py --reindex
 
 ### 2. 启动界面
 
-双击 `启动 dshfind.bat`，或者：
+**最方便**：双击桌面上的 **dshfind** 图标（第一次用先双击一次 `创建桌面快捷方式.bat`）。
+桌面图标点一下的行为：
+
+- 程序**没在跑** → 正常启动（开窗口）
+- 程序**已经在跑** → 把已有窗口叫到前台（等同按热键），**不会**再开第二份
+
+也可以双击 `启动 dshfind.bat`，或者：
 
 ```bat
 python dshfind.py            :: 网页界面
+python dshfind.py --show     :: 同上；已经在跑就把窗口叫到前台（桌面快捷方式用的就是它）
 ```
 
 启动后会开一个 **Edge 应用模式窗口**（没有地址栏、没有标签页，看起来就是个独立应用）。
@@ -465,6 +472,7 @@ node _test_appearance_ui.mjs "http://127.0.0.1:8792/?t=qatoken123"
 node _test_reindex_btn.mjs "http://127.0.0.1:8792/?t=qatoken123"
                                           :: 真点一下「重建索引」按钮，确认后端开始重建
 python dshfind.py --quit                  :: 让正在跑的那个实例干净退出
+python dshfind.py --show                  :: 没跑就启动、在跑就把窗口叫到前台（桌面快捷方式用）
 ```
 
 ## 自检覆盖了什么
@@ -494,6 +502,7 @@ web/                网页界面（index.html / style.css / app.js + GSAP）
 bridge.js           DSH 会话日志的 zstd 多帧解码桥（Node）
 pinyindata.pyz      拼音表（zip 内一个 pinyin.tsv，2.67 万字）
 启动 dshfind.bat         双击启动（网页界面）
+创建桌面快捷方式.bat     在桌面建一个 dshfind 图标（点一下启动 / 叫到前台）
 退出 dshfind.bat         双击彻底退出（关窗口 + 落盘 + 退进程）
 _build_pinyin.py    重新生成拼音表的脚本
 _test_server.py     接口冒烟测试（21 项，进程内起服务）

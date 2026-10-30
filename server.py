@@ -658,6 +658,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self._save_icon(body))
             if path == "/api/appearance/icon/reset":
                 return self._json(self._reset_icon())
+            if path == "/api/focus":
+                win = Handler.window
+                if win is None:
+                    return self._json({"ok": False,
+                                       "error": "没有窗口（--no-window 启动的）"})
+                # 提到前台会调 SetForegroundWindow，放到线程里做，别卡住这次响应
+                threading.Thread(target=win.focus, daemon=True).start()
+                return self._json({"ok": True})
             return self._json({"error": "unknown api"}, 404)
         except Exception as e:
             traceback.print_exc()
@@ -917,21 +925,51 @@ class AppWindow:
         return self.proc is not None and self.proc.poll() is None
 
     def focus(self):
-        """把窗口提到前台。窗口没了就先拉起。"""
+        """把窗口提到前台（找不到窗口才重新拉起）。
+
+        顺序很重要：先找**已经存在的窗口**，最后才 launch。
+        以前是"进程不 alive 就直接 launch" —— 而 Edge 的 launcher 进程在把窗口交给
+        已有浏览器进程后会退出，于是 `alive()` 变 False，一点热键/快捷方式就又开一个
+        窗口（同一时间两个窗口，标题一模一样）。第 14 项就是被这个坑到。
+        """
         import ctypes
-        import ctypes.wintypes as wt
         u = ctypes.windll.user32
 
-        if not self.alive():
-            self.launch()
-            return
         if self.hwnd and u.IsWindow(self.hwnd):
             self._bring(self.hwnd)
             return
-        hwnd = self._find_window_by_pid()
+        hwnd = self._find_window_by_pid() or self._find_window_by_title()
         if hwnd:
             self.hwnd = hwnd
             self._bring(hwnd)
+            return
+        if not self.alive():
+            self.launch()
+
+    def _find_window_by_title(self):
+        """按窗口标题找自己的窗口（标题就是用户设的应用名字）。"""
+        import ctypes
+        import ctypes.wintypes as wt
+        u = ctypes.windll.user32
+        want = (self.title or "").strip().lower()
+        if not want:
+            return None
+        hits = []
+
+        @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+        def cb(hwnd, _lp):
+            if not u.IsWindowVisible(hwnd):
+                return True
+            n = u.GetWindowTextLengthW(hwnd)
+            if n:
+                buf = ctypes.create_unicode_buffer(n + 1)
+                u.GetWindowTextW(hwnd, buf, n + 1)
+                if buf.value.strip().lower() == want:
+                    hits.append(hwnd)
+            return True
+
+        u.EnumWindows(cb, 0)
+        return hits[0] if hits else None
 
     def _bring(self, hwnd):
         """把窗口提到前台并给键盘焦点。

@@ -3836,6 +3836,128 @@ def cmd_quit(args):
     return _quit_by_process()
 
 
+def _read_instance():
+    """读 data/instance.json（正在跑的那个实例的端口/token/pid）。没有就返回 {}。"""
+    import json as _json
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.environ.get("DSHFIND_INSTANCE_FILE") or \
+        os.path.join(here, "data", "instance.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return _json.load(f)
+    except Exception:
+        return {}
+
+
+def _ask_focus(info: dict) -> bool:
+    """让正在跑的实例把窗口提到前台（POST /api/focus）。"""
+    import urllib.error
+    import urllib.request
+
+    port, token = info.get("port"), info.get("token")
+    if not port or not token:
+        return False
+    url = "http://127.0.0.1:%d/api/focus?t=%s" % (port, token)
+    req = urllib.request.Request(url, data=b"{}", method="POST",
+                                 headers={"X-Dsh-Token": token,
+                                          "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=4) as r:
+            import json as _json
+            return bool(_json.loads(r.read()).get("ok"))
+    except Exception:
+        return False
+
+
+def focus_window_by_title(title_hint: str = None) -> bool:
+    """按窗口标题把应用的窗口提到前台（给旧版本实例的兜底，也方便手动调试）。
+
+    为什么不用 pid：Edge 应用窗口属于 msedge 的子进程，和我们自己的 python 进程
+    不是同一个 pid，隔一层就找不准了；而窗口标题是我们自己设的，反而可靠。
+    """
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+    except Exception:
+        return False
+    u = ctypes.WinDLL("user32", use_last_error=True)
+    hint = (title_hint or "").strip().lower()
+    hits = []
+
+    @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+    def cb(hwnd, _lp):
+        if not u.IsWindowVisible(hwnd):
+            return True
+        n = u.GetWindowTextLengthW(hwnd)
+        if n:
+            buf = ctypes.create_unicode_buffer(n + 1)
+            u.GetWindowTextW(hwnd, buf, n + 1)
+            title = buf.value.strip()
+            low = title.lower()
+            if (hint and low == hint) or low.startswith("dshfind"):
+                hits.append(hwnd)
+        return True
+
+    u.EnumWindows(cb, 0)
+    if not hits:
+        return False
+    hwnd = hits[0]
+    SW_RESTORE = 9
+    if u.IsIconic(hwnd):
+        u.ShowWindow(hwnd, SW_RESTORE)
+
+    # Windows 的"前台锁"：不是当前前台进程时，SetForegroundWindow 往往只闪一下。
+    # 和 server.AppWindow._bring 用同一个办法：临时把输入队列接到前台线程上。
+    k = ctypes.WinDLL("kernel32")
+    u.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
+    fg = u.GetForegroundWindow()
+    tid_cur = k.GetCurrentThreadId()
+    tid_fg = 0
+    if fg:
+        pid_buf = wt.DWORD()
+        tid_fg = u.GetWindowThreadProcessId(fg, ctypes.byref(pid_buf))
+    attached = False
+    if tid_fg and tid_fg != tid_cur:
+        attached = bool(u.AttachThreadInput(tid_cur, tid_fg, True))
+    try:
+        u.BringWindowToTop(hwnd)
+        u.SetForegroundWindow(hwnd)
+        u.SetFocus(hwnd)
+    finally:
+        if attached:
+            u.AttachThreadInput(tid_cur, tid_fg, False)
+    # 极短暂置顶再取消，避免被别的置顶窗口压住
+    SWP_NOSIZE, SWP_NOMOVE = 0x0001, 0x0002
+    u.SetWindowPos(hwnd, -1, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE)
+    u.SetWindowPos(hwnd, -2, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE)
+    return True
+
+
+def cmd_show(args):
+    """桌面快捷方式用的入口：已经在跑就把它叫到前台，没跑就正常启动界面。
+
+    这样桌面上那个图标点一下永远"有反应"：
+      没在跑 → 开窗口（正常启动）
+      在跑   → 把已有窗口提到前台（等同按热键），不会再开第二份、也不会占 2.7 GB 内存
+    """
+    info = _read_instance()
+    pid = info.get("pid")
+    if info and _pid_alive(pid):
+        if _ask_focus(info):
+            print("[dshfind] 已经在跑，已把窗口叫到前台。")
+            return 0
+        # 旧版本的实例没有 /api/focus：按窗口标题兜底
+        title = (load_settings().get("app_title") or "").strip()
+        if focus_window_by_title(title or None):
+            print("[dshfind] 已经在跑，已把窗口叫到前台（按标题找的）。")
+            return 0
+        print("[dshfind] 检测到已经在跑（PID %s），但没能把窗口叫到前台。"
+              "可以按热键试试。" % pid)
+        return 0
+    return cmd_gui(args)
+
+
 def _quit_by_process(match: str = None) -> int:
     """按命令行找 dshfind 的 pythonw 进程并结束它（办法比较硬，但找不着别的路时管用）。
 
@@ -3906,6 +4028,8 @@ def main(argv):
         return 0
     if flag == "--quit":
         return cmd_quit(rest)
+    if flag == "--show":
+        return cmd_show(rest)
     if flag == "--reindex":
         return cmd_reindex(rest)
     if flag == "--sessions":
