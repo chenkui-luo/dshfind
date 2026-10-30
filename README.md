@@ -1,7 +1,11 @@
 # dshfind —— Windows 上的文件与会话检索小工具
 
-仿照 [oil-oil/oil-find](https://github.com/oil-oil/oil-find)（macOS 上的 Everything 类工具，MIT 协议）
-做的 Windows 版本，另外加了一件 oil-find 没有的事：**能翻 DSH 的对话记录**。
+仿照 **[oil-oil/oil-find](https://github.com/oil-oil/oil-find)**（作者 **oil-oil / Lin Zhihuang**，
+macOS 上的 Everything 类工具，**MIT 许可**）做的 Windows 版本，另外加了一件 oil-find 没有的事：
+**能翻 DSH 的对话记录**。
+
+> 出处与许可见文末的 [参考仓库与致谢](#参考仓库与致谢)，每一项都写了作者、许可和使用方式；
+> 更细的版本号、文件清单在 [ATTRIBUTION.md](ATTRIBUTION.md)。
 
 - 文件名常驻内存，边输入边出结果
 - 拼音首字母 / 全拼检索中文（`wd` → 文档，`wendang` → 文档）
@@ -534,12 +538,38 @@ data/
 使用说明.md         给用户看的：三步上手 + 键盘速查 + 常见问题
 修改记录.md         每次改动的问题 → 排查 → 改法 → 验证
 项目备忘.md         现状、坑、未解决问题（开工前先读这一份）
+ATTRIBUTION.md      第三方资源出处（作者 / 许可 / 用在哪）
+LICENSE             本项目 MIT 许可
 screenshot*.png     界面 / 外观设置 / 图标各档尺寸的截图
 ```
 
 `.gitignore` 已经把 `data/`、`__pycache__/`、`_aclfix/`、`*.log` 排除掉了 ——
 索引和会话库是本机数据，不入库。
 
-## 许可与来源
+---
 
-代码 MIT。GSAP 的授权情况、oil-find / pypinyin / DSH 的归属见 `ATTRIBUTION.md`。
+## 参考仓库与致谢
+
+本工具是原创代码（Python），**没有复制**下面任何项目的源代码；但设计思路、拼音数据、
+日志格式和动效库来自这些作品。按各自许可的要求，作者与出处列在这里；
+更细的说明（版本号、到底借鉴了哪几处、文件清单）见 [ATTRIBUTION.md](ATTRIBUTION.md)。
+
+| 项目 | 作者 / 组织 | 许可 | 本项目怎么用的 |
+|---|---|---|---|
+| [oil-oil/oil-find](https://github.com/oil-oil/oil-find) | **oil-oil（Lin Zhihuang）** | [MIT](https://github.com/oil-oil/oil-find/blob/main/LICENSE) | **整体设计参照**：文件名常驻内存实时收敛、扁平两级查询语法（空格 AND / `\|` OR / `!` NOT）、`ext:` `kind:` `size:` `dm:` 那套过滤器、加性整数打分、目录噪音继承、拼音双键。源码是 Swift + C，这里是 Python，**未复制代码**，只借鉴设计 |
+| [mozillazg/pypinyin](https://github.com/mozillazg/pypinyin) | **mozillazg**（含 闲耘 / hotoo） | [MIT](https://github.com/mozillazg/pypinyin/blob/master/LICENSE.txt) | **拼音数据**：`pinyindata.pyz` 里的「汉字 → 拼音」取自 pypinyin 0.55.0 的字典，取首读音去声调后重新打包；运行时**不依赖**它，也不联网 |
+| [DeepSeek Harness（DSH）](https://github.com/deepseek-ai) | **DeepSeek** | 见其仓库 | **会话日志格式**：只读 `~/.dsh/sessions/**/session.v*.jsonl.zstd`；`bridge.js` 的多帧 zstd 帧扫描逻辑参考了 DSH 的 `dsh-session-persistence-jsonl` 包 |
+| [GSAP](https://gsap.com/) | **GreenSock** | [Standard License](https://gsap.com/standard-license)（一般用途免费，含商用） | **界面动效**：3.13.0，本地化在 `web/vendor/gsap.min.js`，未修改，文件头保留原始版权声明；运行时不联网 |
+| [SQLite FTS5](https://www.sqlite.org/fts5.html) | **SQLite 团队（D. Richard Hipp 等）** | 公有领域 | **名字索引**：`nameindex.db` 的 trigram 全文索引 |
+
+另外用到但不需要署名的：Python 标准库（`http.server` / `sqlite3` / `marshal` / `gzip` /
+`zipfile`）、Windows 系统 API（`RegisterHotKey`、`ReadDirectoryChangesW`、
+`SetProcessDpiAwarenessContext`、`os.scandir`）、系统自带字体（Segoe UI / Microsoft YaHei UI /
+Consolas）。界面里没有网络字体、没有 CDN、没有第三方 Python 依赖。
+
+## 许可
+
+本项目代码采用 **MIT 许可**，版权归仓库所有者（见 [LICENSE](LICENSE)）。
+
+再分发时请同时保留：本项目 LICENSE、上面表格里各项目的许可声明，以及
+`web/vendor/gsap.min.js` 文件头里的 GreenSock 版权声明。
