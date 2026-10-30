@@ -23,9 +23,9 @@
 
 MIT 许可要求保留版权与许可声明。上面这段即是对该作品的署名。
 
-## 2. pypinyin —— 拼音数据
+## 2. pypinyin（mozillazg/python-pinyin）—— 拼音数据
 
-- 仓库：https://github.com/mozillazg/pypinyin
+- 仓库：https://github.com/mozillazg/python-pinyin
 - 许可：**MIT License**，`Copyright (c) 2016 mozillazg, 闲耘 <hotoo.cn@gmail.com>`
 - 用途：`pinyindata.pyz` 里的「汉字 → 拼音」数据来自 pypinyin 0.55.0 的
   `pypinyin/pinyin_dict.json`（其上游是 Unihan 的 `kMandarin` 读音）。

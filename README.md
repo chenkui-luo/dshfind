@@ -557,7 +557,7 @@ screenshot*.png     界面 / 外观设置 / 图标各档尺寸的截图
 | 项目 | 作者 / 组织 | 许可 | 本项目怎么用的 |
 |---|---|---|---|
 | [oil-oil/oil-find](https://github.com/oil-oil/oil-find) | **oil-oil（Lin Zhihuang）** | [MIT](https://github.com/oil-oil/oil-find/blob/main/LICENSE) | **整体设计参照**：文件名常驻内存实时收敛、扁平两级查询语法（空格 AND / `\|` OR / `!` NOT）、`ext:` `kind:` `size:` `dm:` 那套过滤器、加性整数打分、目录噪音继承、拼音双键。源码是 Swift + C，这里是 Python，**未复制代码**，只借鉴设计 |
-| [mozillazg/pypinyin](https://github.com/mozillazg/pypinyin) | **mozillazg**（含 闲耘 / hotoo） | [MIT](https://github.com/mozillazg/pypinyin/blob/master/LICENSE.txt) | **拼音数据**：`pinyindata.pyz` 里的「汉字 → 拼音」取自 pypinyin 0.55.0 的字典，取首读音去声调后重新打包；运行时**不依赖**它，也不联网 |
+| [mozillazg/python-pinyin](https://github.com/mozillazg/python-pinyin) | **mozillazg**（含 闲耘 / hotoo） | [MIT](https://github.com/mozillazg/python-pinyin/blob/master/LICENSE.txt) | **拼音数据**：`pinyindata.pyz` 里的「汉字 → 拼音」取自 pypinyin 0.55.0 的字典，取首读音去声调后重新打包；运行时**不依赖**它，也不联网 |
 | [DeepSeek Harness（DSH）](https://github.com/deepseek-ai) | **DeepSeek** | 见其仓库 | **会话日志格式**：只读 `~/.dsh/sessions/**/session.v*.jsonl.zstd`；`bridge.js` 的多帧 zstd 帧扫描逻辑参考了 DSH 的 `dsh-session-persistence-jsonl` 包 |
 | [GSAP](https://gsap.com/) | **GreenSock** | [Standard License](https://gsap.com/standard-license)（一般用途免费，含商用） | **界面动效**：3.13.0，本地化在 `web/vendor/gsap.min.js`，未修改，文件头保留原始版权声明；运行时不联网 |
 | [SQLite FTS5](https://www.sqlite.org/fts5.html) | **SQLite 团队（D. Richard Hipp 等）** | 公有领域 | **名字索引**：`nameindex.db` 的 trigram 全文索引 |
