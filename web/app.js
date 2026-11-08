@@ -744,8 +744,19 @@
   qInput.addEventListener('focus', () => $('searchbox').classList.add('is-focus'));
   qInput.addEventListener('blur', () => $('searchbox').classList.remove('is-focus'));
 
+  // 正在文本输入框里打字？（搜索框、外观设置里的标题框……）
+  function typingInField(e) {
+    const t = e.target;
+    if (!t || !t.tagName) return false;
+    const tag = t.tagName.toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    return t.isContentEditable === true;
+  }
+
   // ---------- 键盘 ----------
   document.addEventListener('keydown', (e) => {
+    // 输入法组字过程中的按键不要抢，否则空格确认候选、方向键选词都会失灵
+    if (e.isComposing || e.keyCode === 229) return;
     const k = e.key;
     if (k === 'ArrowDown' || (k === 'n' && e.ctrlKey)) {
       e.preventDefault(); select(state.sel + 1); return;
@@ -754,6 +765,7 @@
       e.preventDefault(); select(state.sel - 1); return;
     }
     if (k === ' ') {
+      if (typingInField(e)) return;      // 空格要留给输入框，不能当预览开关
       e.preventDefault();
       togglePreview();
       return;
