@@ -61,8 +61,11 @@ DSH_PROJCACHE = os.path.join(DSH_HOME, "storages", "session_projcache", "session
 
 # 索引范围（可在 data/settings.json 里覆盖）
 DEFAULT_ROOTS = ["C:\\", "D:\\", "E:\\", "F:\\"]
-# 单个盘的最长扫描时间，防止某个慢盘拖住整体
-ROOT_SCAN_BUDGET = 240.0
+# 单个盘的最长扫描时间，防止某个慢盘拖住整体。
+# 注意这是"超时就整片丢掉"的硬止损：被截断的目录只会留下目录本身，
+# 里面的文件一条都进不了索引（第 15 项踩过：F:\anime 的子项全找不到）。
+# 所以默认放宽到 30 分钟 —— 常见盘几分钟就能扫完，真正需要止损的是异常慢的盘。
+ROOT_SCAN_BUDGET = 1800.0
 # 条目总数上限。纯 Python 条目约 150~250 字节/条，外加路径文本，
 # 400 万条大约 4~6 GB 常驻内存；到上限就停，避免把机器拖垮。
 MAX_ENTRIES = 4_000_000

@@ -216,6 +216,9 @@ class SearchService:
                 "entries": n,
                 "files": self.engine.stats.files if n else 0,
                 "dirs": self.engine.stats.dirs if n else 0,
+                # 扫描时被预算/上限截断的根（例如 "F:\\ (超时预算)"）——
+                # 意味着那一片目录只是链了个壳，子项根本没进索引，界面要提示
+                "truncated": list(getattr(self.engine.stats, "truncated", []) or []),
                 "noise_on": bool(self.settings.get("exclude_noise", True)),
                 "noise_count": getattr(self, "_noise_count", None),
                 "sessions": st["sessions"],

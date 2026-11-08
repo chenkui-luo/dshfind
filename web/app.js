@@ -886,11 +886,14 @@
         rb.disabled = false;
         rb.textContent = '重建索引';
       }
-      // 监听丢过事件 → 索引可能不完整：把按钮点亮，提示用户自己决定要不要重扫
-      rb.classList.toggle('is-alert', !!st.needs_rescan && !st.refreshing);
-      rb.title = st.needs_rescan && !st.refreshing
-        ? '监听丢过文件变更事件，索引可能不完整 —— 需要的话点这里重扫（约 8 分钟）'
-        : '重新扫描磁盘（约 8 分钟），把程序关闭期间新增的文件补进来，等同 Ctrl+R';
+      // 监听丢过事件 / 某个盘没扫完 → 索引不完整：把按钮点亮，让用户决定要不要重扫
+      const bad = (!!st.needs_rescan || (st.truncated && st.truncated.length)) && !st.refreshing;
+      rb.classList.toggle('is-alert', bad);
+      rb.title = !bad
+        ? '重新扫描磁盘，把程序关闭期间新增的文件补进来，等同 Ctrl+R'
+        : (st.truncated && st.truncated.length
+            ? '这些位置没扫完：' + st.truncated.join('、') + ' —— 里面的文件不在索引里，点这里重扫'
+            : '监听丢过文件变更事件，索引可能不完整 —— 需要的话点这里重扫');
     }
 
     statEl.innerHTML = '文件 <b>' + (st.entries || 0).toLocaleString() + '</b> 条 · 会话 <b>' +
@@ -910,12 +913,16 @@
         ? ' · <b style="color:var(--accent)">自动更新中</b>' +
           (st.watch_changes ? '（已同步 ' + st.watch_changes + ' 次变更）' : '')
         : ' · 监听未启动';
-      // 监听丢过事件时只提示，不自动扫 —— 扫不扫由用户点「重建索引」决定
+      // 监听丢过事件 / 某个盘没扫完时只提示，不自动扫 —— 扫不扫由用户点「重建索引」决定
       const stale = st.needs_rescan
         ? ' · <span class="warn">监听丢过事件，索引可能不完整（可点「重建索引」）</span>'
         : '';
+      const trunc = (st.truncated && st.truncated.length)
+        ? ' · <span class="warn">没扫完：' + esc(st.truncated.join('、')) +
+          ' —— 这些位置里的文件搜不到，点「重建索引」补上</span>'
+        : '';
       footStat.innerHTML = '索引 <b>' + (st.entries || 0).toLocaleString() + '</b> 条' +
-        (st.noise_on ? ' · 已隐藏缓存/依赖目录' : ' · 含缓存/依赖目录') + watch + stale;
+        (st.noise_on ? ' · 已隐藏缓存/依赖目录' : ' · 含缓存/依赖目录') + watch + stale + trunc;
     }
 
     if (state.ready && !wasReady) {
