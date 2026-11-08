@@ -68,8 +68,10 @@
       <b>Tab</b> 切换 · <b>空格</b> 预览 · <b>Ctrl+E</b> 缓存目录
     </span>
     <!-- 关窗口只是关窗口，后台的服务、热键、文件监听还在。这个按钮是真退出。 -->
+    <button class="footbtn" id="rebuildRootBtn" hidden
+            title="只重扫这一个盘，其它盘沿用现有索引（比全量快很多）">只重建 F 盘</button>
     <button class="footbtn" id="reindexBtn"
-            title="重新扫描磁盘（约 8 分钟），把程序关闭期间新增的文件补进来，等同 Ctrl+R">重建索引</button>
+            title="重新扫描磁盘，把程序关闭期间新增的文件补进来，等同 Ctrl+R">重建索引</button>
     <button class="footbtn is-danger" id="quitBtn" title="完全退出 dshfind（Ctrl+Q）">退出</button>
   </footer>
 </div>

@@ -66,6 +66,11 @@ DEFAULT_ROOTS = ["C:\\", "D:\\", "E:\\", "F:\\"]
 # 里面的文件一条都进不了索引（第 15 项踩过：F:\anime 的子项全找不到）。
 # 所以默认放宽到 30 分钟 —— 常见盘几分钟就能扫完，真正需要止损的是异常慢的盘。
 ROOT_SCAN_BUDGET = 1800.0
+# 扫描时整棵跳过的目录名（第 16 项）：Unity 工程的 Library 动辄几十万文件，
+# 而且都是可再生的缓存；这类目录只登记目录本身，不进去。
+DEFAULT_SKIP_SCAN_DIRS = ["library", "packagecache", "obj", "memorycaptures", "temp"]
+# 「只重建某个盘」按钮默认针对哪个盘
+DEFAULT_QUICK_ROOT = "F:\\"
 # 条目总数上限。纯 Python 条目约 150~250 字节/条，外加路径文本，
 # 400 万条大约 4~6 GB 常驻内存；到上限就停，避免把机器拖垮。
 MAX_ENTRIES = 4_000_000
@@ -227,6 +232,12 @@ def load_settings() -> dict:
     cfg.setdefault("index_sessions", True)
     cfg.setdefault("session_roots", [DSH_SESSIONS])
     cfg.setdefault("per_root_budget", ROOT_SCAN_BUDGET)
+    # 扫描时整棵跳过的目录（按名字，大小写不敏感）：目录本身还会进索引（能搜到），
+    # 但不会进它的子树。默认跳过 Unity / 常见构建缓存 —— 它们能占条目的一大半，
+    # 又基本没人真去搜（想搜就把对应名字从这里删掉，然后重建一次）。
+    cfg.setdefault("skip_scan_dirs", list(DEFAULT_SKIP_SCAN_DIRS))
+    # 「只重建某个盘」按钮针对哪个盘（要出现在 roots 里；留空则界面不显示这个按钮）
+    cfg.setdefault("quick_root", DEFAULT_QUICK_ROOT)
     # 监听缓冲区溢出（丢了文件变更事件）时要不要自动做一次全量重扫。
     # 默认 false：重扫要八分钟，而"刚打开程序"正是文件活动最多的时候，
     # 自动扫会让人以为"每次启动都在重建"。界面上有「重建索引」按钮，由用户决定。
@@ -2130,7 +2141,8 @@ class FileWatcher(threading.Thread):
 
 
 class ScanStats:
-    __slots__ = ("files", "dirs", "skipped", "bytes", "seconds", "truncated", "errors")
+    __slots__ = ("files", "dirs", "skipped", "bytes", "seconds", "truncated", "errors",
+                 "pruned")
 
     def __init__(self):
         self.files = 0
@@ -2140,10 +2152,13 @@ class ScanStats:
         self.seconds = 0.0
         self.truncated = []
         self.errors = 0
+        # 扫描时因为"整棵子树跳过"而没进去的目录数（skip_scan_dirs 命中）
+        self.pruned = 0
 
     def as_dict(self):
         return {
             "files": self.files, "dirs": self.dirs, "skipped": self.skipped,
+            "pruned": self.pruned,
             "gb": round(self.bytes / 1e9, 1), "seconds": round(self.seconds, 1),
             "truncated": self.truncated, "errors": self.errors,
         }
@@ -2530,14 +2545,28 @@ class IndexEngine:
         sorted_save_stamp(self)
 
     # -- 构建 -------------------------------------------------------------
-    def build(self, roots=None, budget=None, on_progress=None, cap=None):
+    def build(self, roots=None, budget=None, on_progress=None, cap=None,
+              keep_entries=None):
+        """扫描 roots，重建内存索引。
+
+        keep_entries：给"只重建某个盘"用 —— 这些条目会原样保留，
+                     扫描结果追加在后面（调用方负责保证两者不重叠）。
+                      同时还会保留 keep 里的 by_key / 统计口径。
+        """
         roots = roots or self.settings["roots"]
         budget = budget or self.settings.get("per_root_budget", ROOT_SCAN_BUDGET)
         cap = cap or int(self.settings.get("max_entries") or MAX_ENTRIES)
+        # 扫描时整棵跳过的目录名（第 16 项）：Unity 的 Library/PackageCache 这类
+        # 缓存目录占条目一大半、又没人真去搜，扫它们纯属浪费时间和内存。
+        skip_dirs = {str(x).strip().lower().rstrip("\\")
+                     for x in (self.settings.get("skip_scan_dirs") or [])
+                     if str(x).strip()}
         t_all = time.perf_counter()
-        entries: list[Entry] = []
+        entries: list[Entry] = list(keep_entries or ())
         by_key: dict[str, Entry] = {}
         stats = ScanStats()
+        for e in entries:
+            by_key[norm_key(e.path)] = e
         self.cancel.clear()
 
         for root in roots:
@@ -2602,7 +2631,11 @@ class IndexEngine:
                             by_key[path_low] = entries[-1]
                             if is_dir:
                                 stats.dirs += 1
-                                stack.append((path, path_low + "\\", noise, depth))
+                                if name_low in skip_dirs:
+                                    # 目录本身留下（还能搜到），但不进它的子树
+                                    stats.pruned += 1
+                                else:
+                                    stack.append((path, path_low + "\\", noise, depth))
                             else:
                                 stats.files += 1
                                 stats.bytes += st.st_size
@@ -2615,6 +2648,14 @@ class IndexEngine:
             if self.cancel.is_set():
                 break
 
+        if keep_entries:
+            # 保留的那部分也算进统计，否则界面上的"文件/目录"数会变小
+            for e in keep_entries:
+                if e.is_dir:
+                    stats.dirs += 1
+                else:
+                    stats.files += 1
+                    stats.bytes += int(e.size or 0)
         stats.seconds = time.perf_counter() - t_all
         with self.lock:
             # 卷根条目统一放宽打分别用
@@ -2625,6 +2666,29 @@ class IndexEngine:
             self.pinyin_ready = False
             self.pinyin = PinyinIndex()
         return stats
+
+    def rebuild_one_root(self, root, on_progress=None):
+        """只重扫一个根，其它盘的条目原样保留（第 16 项：只重建 F 盘）。
+
+        为什么不是"删掉这个根再扫"：索引是一个整体文件，删了就没了；
+        这里先把不属于这个根的条目拿出来，扫完再把新条目接在后面。
+
+        注意：条目顺序会变（这个根的新条目排到最后），而名字索引的 rowid
+        就是条目下标 —— 所以调用方**必须**跟着重建名字索引和排序索引。
+        """
+        root = os.path.abspath(root)
+        root_low = norm_key(root).rstrip("\\")
+        keep = []
+        drop = 0
+        for e in self.entries:
+            k = norm_key(e.path)
+            if k == root_low or k.startswith(root_low + "\\"):
+                drop += 1
+                continue
+            keep.append(e)
+        print("[dshfind] 只重建 %s：保留其它 %d 条，丢掉旧 %d 条"
+              % (root, len(keep), drop), flush=True)
+        return self.build([root], on_progress=on_progress, keep_entries=keep)
 
     # -- 持久化 -----------------------------------------------------------
     def save(self, path: str = INDEX_PATH):
@@ -3504,7 +3568,13 @@ def cmd_reindex(args):
     require_windows()
     settings = load_settings()
     eng = IndexEngine(settings)
-    print("开始扫描：%s" % ", ".join(settings["roots"]))
+    # `--reindex F:\` = 只重建这一个盘，其它盘保留（第 16 项）
+    one = [a for a in (args or []) if not str(a).startswith("-")]
+    root_only = one[0] if one else None
+    if root_only:
+        print("只重建：%s（其它盘沿用现有索引）" % root_only)
+    else:
+        print("开始扫描：%s" % ", ".join(settings["roots"]))
     t0 = time.perf_counter()
 
     def prog(root, files, dirs, elapsed):
@@ -3512,22 +3582,31 @@ def cmd_reindex(args):
                          % (root, "{:,}".format(files), "{:,}".format(dirs), elapsed))
         sys.stdout.flush()
 
-    st = eng.build(settings["roots"], on_progress=prog)
-    print("\n扫描完成：%s 文件 / %s 目录，%.1f 秒"
-          % ("{:,}".format(st.files), "{:,}".format(st.dirs), st.seconds))
+    if root_only:
+        if not eng.load():
+            print("没有现成的索引可沿用，改为完整重建这一个盘")
+            st = eng.build([root_only], on_progress=prog)
+        else:
+            st = eng.rebuild_one_root(root_only, on_progress=prog)
+    else:
+        st = eng.build(settings["roots"], on_progress=prog)
+    print("\n扫描完成：%s 文件 / %s 目录，%.1f 秒（跳过 %d 个缓存目录的子树）"
+          % ("{:,}".format(st.files), "{:,}".format(st.dirs), st.seconds, st.pruned))
     if st.truncated:
         print("注意，以下卷未扫完：")
         for t in st.truncated:
             print("  -", t)
     p = eng.save()
     print("索引已保存：%s（%.1f MB）" % (p, os.path.getsize(p) / 1e6))
-    # 全量重建之后，之前监听积累的增量就不需要了（新索引里已经包含它们）
-    try:
-        if os.path.exists(DELTA_PATH):
-            os.unlink(DELTA_PATH)
-            print("已清除增量缓存（%s）" % os.path.basename(DELTA_PATH))
-    except OSError:
-        pass
+    # 全量重建之后，之前监听积累的增量就不需要了（新索引里已经包含它们）；
+    # 只重建一个盘时留着它，免得别的盘的增量条目被一起清掉
+    if not root_only:
+        try:
+            if os.path.exists(DELTA_PATH):
+                os.unlink(DELTA_PATH)
+                print("已清除增量缓存（%s）" % os.path.basename(DELTA_PATH))
+        except OSError:
+            pass
     print("\n正在建排序索引（按大小/时间，约 15 秒）…")
     t0 = time.perf_counter()
     eng.build_sorted()

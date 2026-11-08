@@ -40,6 +40,7 @@
     ready: false,
     loading: true,
     refreshing: false,   // 是否正在全量重建索引
+    quickRoot: '',       // 「只重建某个盘」的目标盘
     lastQuery: '',
     seq: 0,          // 请求序号，防竞态
     pvCollapsed: true,   // 预览默认收起，把高度让给结果列表
@@ -84,25 +85,46 @@
   // ---------- 重建索引 ----------
   // 运行期间新增的文件由文件监听自动收录（0.5 秒左右）；
   // 但**程序关着**的时候新增的文件没人看见，只能重扫一遍磁盘才能补进来。
-  // 所以底部放一个「重建索引」按钮，等同 Ctrl+R。
+  // 所以底部放「重建索引」（全量）和「只重建 F 盘」（单盘合并，快得多）两个按钮。
   let reindexing = false;
+
   async function reindexNow(ask = true) {
     if (reindexing) return;
     if (ask) {
       const ok = window.confirm(
         '要重新扫描磁盘吗？\n\n' +
-        '会遍历 C、D、E、F 四个卷，大约 8 分钟。\n' +
+        '会遍历 C、D、E、F 四个卷（Unity 等缓存目录会跳过），大约 10～30 分钟。\n' +
         '注意：重建期间索引是不完整的，可能搜不到东西，重建完就恢复。\n\n' +
         '什么时候需要：只有「程序关闭期间」新增/移动的文件才要这一步；' +
         '程序运行期间新增的文件会自动收录，不用重建。');
       if (!ok) return;
     }
+    await startRefresh('');
+  }
+
+  // 只重建一个盘：其它盘沿用现有条目，扫完把新的接上（服务端会顺带重建名字索引）
+  async function reindexOneRoot(root, ask = true) {
+    if (reindexing || !root) return;
+    if (ask) {
+      const ok = window.confirm(
+        '只重建 ' + root + ' 吗？\n\n' +
+        '只重扫这一个盘，其它盘沿用现有索引，通常比全量快很多。\n' +
+        '重建期间这个盘的文件可能暂时搜不到，完成后恢复。');
+      if (!ok) return;
+    }
+    await startRefresh(root);
+  }
+
+  async function startRefresh(root) {
     reindexing = true;
     const btn = $('reindexBtn');
+    const btn1 = $('rebuildRootBtn');
     if (btn) { btn.disabled = true; btn.textContent = '重建中…'; }
-    footStat.innerHTML = '已开始重建索引，进度显示在这里…';
+    if (btn1) btn1.disabled = true;
+    footStat.innerHTML = root ? ('已开始只重建 ' + esc(root) + '，进度显示在这里…')
+                              : '已开始重建索引，进度显示在这里…';
     try {
-      await post('/api/refresh');
+      await post('/api/refresh', root ? { root } : {});
     } catch (e) {
       footStat.innerHTML = '<span class="warn">启动重建失败：' + esc(e.message) + '</span>';
     }
@@ -809,6 +831,11 @@
 
   $('quitBtn').addEventListener('click', quitApp);
   $('reindexBtn').addEventListener('click', () => reindexNow(true));
+  $('rebuildRootBtn').addEventListener('click', () => {
+    const root = (state.quickRoot || '').trim();
+    if (!root) { footStat.textContent = '没有配置 quick_root'; return; }
+    reindexOneRoot(root, true);
+  });
 
   // ---------- 外观设置的事件 ----------
   $('settingsBtn').addEventListener('click', openAppearance);
@@ -875,6 +902,7 @@
     state.ready = !!st.ready;
     state.loading = !!st.loading;
     state.refreshing = !!st.refreshing;      // 「重建索引」按钮靠它恢复
+    state.quickRoot = st.quick_root || '';
 
     const rb = $('reindexBtn');
     if (rb) {
@@ -894,6 +922,23 @@
         : (st.truncated && st.truncated.length
             ? '这些位置没扫完：' + st.truncated.join('、') + ' —— 里面的文件不在索引里，点这里重扫'
             : '监听丢过文件变更事件，索引可能不完整 —— 需要的话点这里重扫');
+    }
+
+    // 「只重建某个盘」按钮：quick_root 在 roots 里才显示
+    const rb1 = $('rebuildRootBtn');
+    if (rb1) {
+      if (st.quick_root) {
+        rb1.hidden = false;
+        // "F:\\" → "只重建 F 盘"
+        const drive = (st.quick_root.match(/^([A-Za-z]):/) || [])[1];
+        rb1.textContent = '只重建 ' + (drive ? drive + ' 盘' : st.quick_root);
+      } else {
+        rb1.hidden = true;
+      }
+      rb1.disabled = !!st.refreshing;
+      if (st.quick_root) {
+        rb1.title = '只重扫 ' + st.quick_root + '，其它盘沿用现有索引（通常比全量快很多）';
+      }
     }
 
     statEl.innerHTML = '文件 <b>' + (st.entries || 0).toLocaleString() + '</b> 条 · 会话 <b>' +

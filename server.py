@@ -75,6 +75,7 @@ class SearchService:
         self.refreshing = False
         self.refresh_phase = ""
         self.refresh_detail = ""
+        self.refresh_root = ""       # 非空表示"只重建这个盘"
         self.watcher = None
         self.watch_stats = {"changes": 0, "last": 0, "overflow": 0, "running": False}
         # 监听丢过事件 → 索引可能不完整。默认只提示，不自动全量重扫（第 11 项）
@@ -229,6 +230,12 @@ class SearchService:
                 "refreshing": self.refreshing,
                 "refresh_phase": self.refresh_phase,
                 "refresh_detail": self.refresh_detail,
+                "refresh_root": self.refresh_root,
+                # 「只重建某个盘」按钮用：设置里的 quick_root，得真在 roots 里
+                "quick_root": (self.settings.get("quick_root") or "")
+                               if (self.settings.get("quick_root") or "") in
+                                  (self.settings.get("roots") or []) else "",
+                "skip_scan_dirs": list(self.settings.get("skip_scan_dirs") or []),
                 "version": D.APP_VERSION,
                 "hotkey": Handler.hotkey,
                 "watch_running": bool(self.watch_stats.get("running")),
@@ -383,23 +390,31 @@ class SearchService:
                 pass
             return {"ok": True, "noise_on": self.settings["exclude_noise"]}
 
-    def refresh(self) -> dict:
+    def refresh(self, root: str = "") -> dict:
+        """重建索引。root 非空时只重扫那一个盘（其它盘沿用现有条目）。"""
         if self.refreshing:
             return {"ok": False, "error": "正在刷新"}
         self.refreshing = True
-        threading.Thread(target=self._refresh_all, daemon=True).start()
-        return {"ok": True}
+        self.refresh_root = root or ""
+        threading.Thread(target=self._refresh_all, args=(root or "",),
+                         daemon=True).start()
+        return {"ok": True, "root": self.refresh_root}
 
-    def _refresh_all(self):
+    def _refresh_all(self, root: str = ""):
         try:
-            def prog(root, files, dirs, el):
+            def prog(r, files, dirs, el):
                 self.refresh_phase = "scan"
-                self.refresh_detail = "%s · %s 文件" % (root, "{:,}".format(files))
+                self.refresh_detail = "%s · %s 文件" % (r, "{:,}".format(files))
 
             self.refresh_phase = "scan"
-            stats = self.engine.build(self.settings["roots"],
-                                      budget=self.settings.get("per_root_budget"),
-                                      on_progress=prog)
+            if root:
+                self.refresh_detail = "只重建 %s" % root
+                stats = self.engine.rebuild_one_root(
+                    root, on_progress=prog)
+            else:
+                stats = self.engine.build(self.settings["roots"],
+                                          budget=self.settings.get("per_root_budget"),
+                                          on_progress=prog)
             self.refresh_phase = "index"
             self.refresh_detail = "重建拼音/排序索引"
             with self.lock:
@@ -650,7 +665,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/toggle-noise":
                 return self._json(svc.toggle_noise())
             if path == "/api/refresh":
-                return self._json(svc.refresh())
+                return self._json(svc.refresh((body.get("root") or "").strip()))
             if path == "/api/quit":
                 self._json({"ok": True})
                 threading.Timer(0.4, quit_app).start()
