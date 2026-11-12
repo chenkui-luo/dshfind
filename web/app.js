@@ -982,6 +982,9 @@
         (st.noise_on ? ' · 已隐藏缓存/依赖目录' : ' · 含缓存/依赖目录') + watch + stale + trunc;
     }
 
+    // 底栏窄的时候文字会被省略号收掉：留一份全文在 title 里，鼠标悬停就能看全
+    footStat.title = footStat.textContent;
+
     if (state.ready && !wasReady) {
       // 索引刚就绪：让界面有个"到位"的反馈
       if (anim) {

@@ -475,8 +475,27 @@ kbd.hint {
   white-space: nowrap;
 }
 .foot b { color: var(--fg-2); font-weight: 600; }
-.keys { opacity: 0.72; }
 .foot .warn { color: var(--warn); }
+
+/* 状态文字和快捷键提示都可以被压缩、用省略号收尾；
+   右边的按钮则永远完整可见 —— 否则文字一长，按钮就被挤到窗口外面点不到了。 */
+#footStat {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.foot .keys {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.72;
+}
+/* 窗口不够宽时，先让位给状态文字：快捷键提示本来文档里也有 */
+@media (max-width: 1240px) {
+  .foot .keys { display: none; }
+}
 
 /* 底部的动作按钮（重建索引 / 退出）：平时很淡，靠近才显出来，别抢检索信息的位置 */
 .footbtn {
